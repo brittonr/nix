@@ -25,7 +25,7 @@ struct ExperimentalFeatureDetails
  * feature, we either have no issue at all if few features are not added
  * at the end of the list, or a proper merge conflict if they are.
  */
-constexpr size_t numXpFeatures = 1 + static_cast<size_t>(Xp::BLAKE3Hashes);
+constexpr size_t numXpFeatures = 1 + static_cast<size_t>(Xp::Radicle);
 
 constexpr std::array<ExperimentalFeatureDetails, numXpFeatures> xpFeatureDetails = {{
     {
@@ -320,6 +320,27 @@ constexpr std::array<ExperimentalFeatureDetails, numXpFeatures> xpFeatureDetails
             Enables support for BLAKE3 hashes.
         )",
         .trackingUrl = "",
+    },
+    {
+        .tag = Xp::Radicle,
+        .name = "radicle",
+        .description = R"(
+            Enable Radicle input fetching support for flakes.
+
+            This allows using Radicle repositories as flake inputs with the
+            `radicle:` URL scheme. Radicle IDs can be used directly:
+
+            ```
+            {
+              inputs.example.url = "radicle:rad:z3gqcJUoA1n9HaHKufZs5FCSGazv5";
+            }
+            ```
+
+            This feature requires the `rad` CLI tool to be available and
+            configured with appropriate authentication for accessing Radicle
+            repositories.
+        )",
+        .trackingUrl = "https://github.com/NixOS/nix/milestone/57",
     },
 }};
 
