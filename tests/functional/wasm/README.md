@@ -9,6 +9,7 @@ Pre-built `.wasm` modules for testing `builtins.wasm`.
 | `pure_double.wasm` | non-WASI | `wasm32-unknown-unknown` | Doubles an integer. Exports `nix_wasm_init_v1` and `double`. |
 | `wasi_double.wasm` | WASI | `wasm32-wasip1` | Doubles an integer via `_start` + `return_to_nix`. |
 | `wasi_hello.wasm` | WASI | `wasm32-wasip1` | Writes to stdout/stderr, returns "done" string. |
+| `wasi_no_return.wasm` | WASI | `wasm32-wasip1` | Exits without calling `return_to_nix` (error path test). |
 
 ## Rebuilding
 

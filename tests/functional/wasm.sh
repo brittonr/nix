@@ -69,6 +69,12 @@ echo "Testing error on missing function attr with non-WASI module..."
 expectStderr 1 wasm_eval --expr "builtins.wasm { path = $wasmDir/pure_double.wasm; } 1" \
     | grep -q "missing required 'function'" || { echo "FAIL: expected missing function error"; exit 1; }
 
+# ── Error: WASI module without return_to_nix ──
+
+echo "Testing error on WASI module without return_to_nix..."
+expectStderr 1 wasm_eval --expr "builtins.wasm { path = $wasmDir/wasi_no_return.wasm; } 1" \
+    | grep -q "finished without returning a value" || { echo "FAIL: expected no-return error"; exit 1; }
+
 # ── Error: feature gate ──
 
 echo "Testing feature gate..."

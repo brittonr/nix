@@ -34,11 +34,13 @@ pkgs.stdenv.mkDerivation {
     cargo build --release --target wasm32-unknown-unknown -p pure-double
     cargo build --release --target wasm32-wasip1 -p wasi-double
     cargo build --release --target wasm32-wasip1 -p wasi-hello
+    cargo build --release --target wasm32-wasip1 -p wasi-no-return
   '';
   installPhase = ''
     mkdir -p $out
     cp target/wasm32-unknown-unknown/release/pure_double.wasm $out/
     cp target/wasm32-wasip1/release/wasi_double.wasm $out/
     cp target/wasm32-wasip1/release/wasi_hello.wasm $out/
+    cp target/wasm32-wasip1/release/wasi_no_return.wasm $out/
   '';
 }

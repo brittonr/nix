@@ -24,6 +24,6 @@
 - [x] Test: error on unknown attribute in config ✅
 - [x] Test: error on `function` attribute with WASI module ✅
 - [x] Test: error on missing `function` attribute with non-WASI module ✅
-- [ ] Test: error when WASI module finishes without calling `return_to_nix` (needs dedicated fixture)
+- [x] Test: error when WASI module finishes without calling `return_to_nix` ✅ 2m (started: 2026-03-29T19:45Z -> completed: 2026-03-29T19:46Z)
 - [x] Test: error without `--extra-experimental-features wasm-builtin` ✅
 - [x] Wire `wasm.sh` into `tests/functional/meson.build` ✅
