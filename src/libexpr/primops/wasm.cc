@@ -3,8 +3,6 @@
 
 #include <wasmtime.hh>
 #include <boost/unordered/concurrent_flat_map.hpp>
-#include <filesystem>
-#include <fstream>
 
 /**
  * Local realisePath for wasm.cc — mirrors the static function in primops.cc
@@ -72,38 +70,70 @@ static std::span<T> subspan(std::span<uint8_t> s, size_t len)
     return std::span((T *) s.data(), len);
 }
 
+// FIXME: move to wasmtime C++ wrapper.
+class InstancePre
+{
+    WASMTIME_OWN_WRAPPER(InstancePre, wasmtime_instance_pre);
+
+public:
+    TrapResult<Instance> instantiate(wasmtime::Store::Context cx)
+    {
+        wasmtime_instance_t instance;
+        wasm_trap_t * trap = nullptr;
+        auto * error = wasmtime_instance_pre_instantiate(ptr.get(), cx.capi(), &instance, &trap);
+        if (error != nullptr) {
+            return TrapError(wasmtime::Error(error));
+        }
+        if (trap != nullptr) {
+            return TrapError(Trap(trap));
+        }
+        return Instance(instance);
+    }
+};
+
+TrapResult<InstancePre> instantiate_pre(Linker & linker, const Module & m)
+{
+    wasmtime_instance_pre_t * instance_pre;
+    auto * error = wasmtime_linker_instantiate_pre(linker.capi(), m.capi(), &instance_pre);
+    if (error != nullptr) {
+        return TrapError(wasmtime::Error(error));
+    }
+    return InstancePre(instance_pre);
+}
+
 static void regFuns(Linker & linker, bool useWasi);
 
-/**
- * Pre-compiled module state cached per source path.
- * Holds the compiled Module and a configured Linker so each invocation only
- * needs to instantiate (not recompile or re-link).
- */
 struct NixWasmInstancePre
 {
     Engine & engine;
     SourcePath wasmPath;
     bool useWasi;
-    Module module;
-    Linker linker;
+    InstancePre instancePre;
 
     NixWasmInstancePre(SourcePath _wasmPath)
         : engine(getEngine())
         , wasmPath(_wasmPath)
         , useWasi(false)
-        , module(unwrap(Module::compile(engine, string2span(wasmPath.readFile()))))
-        , linker(engine)
-    {
-        // Auto-detect WASI by checking for wasi_snapshot_preview1 imports.
-        for (auto ref : module.imports())
-            if (ref.module() == "wasi_snapshot_preview1") {
-                useWasi = true;
-                break;
-            }
+        , instancePre(({
+            // Compile the module
+            auto module = unwrap(Module::compile(engine, string2span(wasmPath.readFile())));
 
-        if (useWasi)
-            unwrap(linker.define_wasi());
-        regFuns(linker, useWasi);
+            // Auto-detect WASI by checking for wasi_snapshot_preview1 imports.
+            for (const auto & ref : module.imports())
+                if (const_cast<std::decay_t<decltype(ref)> &>(ref).module() == "wasi_snapshot_preview1") {
+                    useWasi = true;
+                    break;
+                }
+
+            // Create linker with appropriate WASI support
+            Linker linker(engine);
+            if (useWasi)
+                unwrap(linker.define_wasi());
+            regFuns(linker, useWasi);
+
+            unwrap(instantiate_pre(linker, module));
+        }))
+    {
     }
 };
 
@@ -130,7 +160,7 @@ struct NixWasmInstance
         , pre(_pre)
         , wasmStore(pre->engine)
         , wasmCtx(wasmStore)
-        , instance(unwrap(pre->linker.instantiate(wasmCtx, pre->module)))
+        , instance(unwrap(pre->instancePre.instantiate(wasmCtx)))
         , memory_(getExport<Memory>("memory"))
         , logPrefix(pre->wasmPath.baseName())
     {
@@ -545,45 +575,31 @@ static NixWasmInstance instantiateWasm(EvalState & state, const SourcePath & was
 }
 
 /**
- * Emit WASI output (from a temp file) as Nix warnings, one per line.
- * Partial lines (no trailing newline) are emitted as a final warning.
+ * Callback for WASI stdout/stderr writes. It splits the output into lines and logs each line separately.
  */
-static void emitWasiOutput(NixWasmInstance & instance, const std::filesystem::path & path)
-{
-    std::ifstream f(path);
-    if (!f)
-        return;
-    std::string line;
-    while (std::getline(f, line))
-        instance.doWarn(line);
-}
-
-/**
- * RAII wrapper for a pair of temp files used to capture WASI stdout/stderr.
- * Files are deleted on destruction; output is emitted as Nix warnings.
- */
-struct WasiOutputCapture
+struct WasiLogger
 {
     NixWasmInstance & instance;
-    std::filesystem::path stdoutPath;
-    std::filesystem::path stderrPath;
 
-    WasiOutputCapture(NixWasmInstance & _instance)
-        : instance(_instance)
+    std::string data;
+
+    ~WasiLogger()
     {
-        // Create unique temp files for this invocation
-        auto base = std::filesystem::temp_directory_path() / "nix-wasi";
-        stdoutPath = base.string() + "-" + std::to_string(reinterpret_cast<uintptr_t>(this)) + "-stdout";
-        stderrPath = base.string() + "-" + std::to_string(reinterpret_cast<uintptr_t>(this)) + "-stderr";
+        if (!data.empty())
+            instance.doWarn(data);
     }
 
-    ~WasiOutputCapture()
+    void operator()(std::string_view s)
     {
-        // Emit captured output as warnings, then clean up
-        emitWasiOutput(instance, stdoutPath);
-        emitWasiOutput(instance, stderrPath);
-        std::filesystem::remove(stdoutPath);
-        std::filesystem::remove(stderrPath);
+        data.append(s);
+
+        while (true) {
+            auto pos = data.find('\n');
+            if (pos == std::string_view::npos)
+                break;
+            instance.doWarn(data.substr(0, pos));
+            data.erase(0, pos + 1);
+        }
     }
 };
 
@@ -630,13 +646,17 @@ static void prim_wasm(EvalState & state, const PosIdx pos, Value ** args, Value 
         auto argId = instance.addValue(argValue);
 
         if (instance.pre->useWasi) {
-            WasiOutputCapture capture{instance};
+            WasiLogger logger{instance};
+
+            auto loggerTrampoline = [](void * data, const unsigned char * buf, size_t len) -> ptrdiff_t {
+                auto logger = static_cast<WasiLogger *>(data);
+                (*logger)(std::string_view((const char *) buf, len));
+                return len;
+            };
 
             WasiConfig wasiConfig;
-            if (!wasiConfig.stdout_file(capture.stdoutPath.string()))
-                throw Error("failed to open WASI stdout capture file '%s'", capture.stdoutPath.string());
-            if (!wasiConfig.stderr_file(capture.stderrPath.string()))
-                throw Error("failed to open WASI stderr capture file '%s'", capture.stderrPath.string());
+            wasi_config_set_stdout_custom(wasiConfig.capi(), loggerTrampoline, &logger, nullptr);
+            wasi_config_set_stderr_custom(wasiConfig.capi(), loggerTrampoline, &logger, nullptr);
             wasiConfig.argv(std::vector<std::string>{"wasi", std::to_string(argId)});
             unwrap(instance.wasmStore.context().set_wasi(std::move(wasiConfig)));
 

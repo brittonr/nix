@@ -2,11 +2,10 @@
 
 ## Phase 1: Verify Existing Implementation
 
-- [x] Diff our `wasm.cc` against upstream merge commit `3306013` and confirm no behavioral differences beyond 2.33.3 API adaptations ✅ 30m (started: 2026-03-29T19:04Z -> completed: 2026-03-29T19:17Z)
-- [x] Diff our `doc/manual/source/protocols/wasm.md` against upstream and confirm docs are identical ✅ 5m (started: 2026-03-29T19:09Z -> completed: 2026-03-29T19:09Z)
-- [x] Fix wasmtime build: downgrade v40.0.2 -> v36.0.0 (v40 requires rustc 1.89, nixpkgs has 1.86) ✅ 12m (started: 2026-03-29T19:10Z -> completed: 2026-03-29T19:22Z)
-- [x] Adapt wasm.cc for wasmtime 36 C++ API (InstancePre -> Linker+Module, file-based I/O capture, const-correctness) ✅ 5m (started: 2026-03-29T19:17Z -> completed: 2026-03-29T19:22Z)
-- [x] Build nix-expr with wasm support enabled — compiles clean ✅ 1m (started: 2026-03-29T19:21Z -> completed: 2026-03-29T19:22Z)
+- [x] Diff our `wasm.cc` against upstream merge commit `3306013` — 4 localized 2.33.3 adaptations, functionally equivalent ✅ 13m (started: 2026-03-29T19:04Z -> completed: 2026-03-29T19:17Z)
+- [x] Diff our `doc/manual/source/protocols/wasm.md` against upstream — identical, zero diff ✅ 1m (started: 2026-03-29T19:09Z -> completed: 2026-03-29T19:09Z)
+- [x] Fix build: bump nixpkgs input from nixos-25.05 (rustc 1.86) to nixos-unstable (rustc 1.94) so wasmtime 40.0.2 compiles ✅ 7m (started: 2026-03-29T19:28Z -> completed: 2026-03-29T19:35Z)
+- [x] Build nix-expr with wasm support enabled — compiles clean ✅ 1m (started: 2026-03-29T19:33Z -> completed: 2026-03-29T19:34Z)
 
 ## Phase 2: Test Fixtures
 
