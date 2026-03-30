@@ -10,10 +10,14 @@
 - Build system: meson, C++23, Nix flake
 
 ## Patterns That Work
-- (accumulate here as you learn them)
+- `expectStderr N cmd` in test pipelines: exit code must match exactly (nix-build returns 102 for BuildError, not 1)
+- For functional test error grepping, capture stderr to a file: `cmd 2>"$TEST_ROOT/err" && fail || true; grepQuiet pattern "$TEST_ROOT/err"`
+- `fixed.builder1.sh` requires IMPURE_VAR1/IMPURE_VAR2; use `buildCommand` in mkDerivation for simple FOD tests
+- `PosixSourceAccessor::createAtRoot()` returns a SourcePath, not ref<SourceAccessor>; use `make_ref<PosixSourceAccessor>(path, true)` directly
 
 ## Patterns That Don't Work
-- (accumulate here as approaches fail and why)
+- lazy-path-inputs via PosixSourceAccessor: flake resolution code calls `lstat()` on flake.lock (throws if missing), and the C API test `nix_api_load_flake_with_flags` fails because the lazy accessor doesn't match store accessor behavior for missing files during lock file creation. Needs analysis of flake lock resolution flow before attempting again.
+- `input-substitution-before-fetch` (DetSys #380): already implemented in 2.33.3 in `getAccessorUnchecked()` — `isFinal() && getNarHash()` → `store.ensurePath()` before `scheme->getAccessor()`
 
 ## Domain Notes
 - wasmtime v40.0.2 needs rustc 1.89+; fixed by bumping nixpkgs from nixos-25.05 to nixos-unstable (rustc 1.94)
