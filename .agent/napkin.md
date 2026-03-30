@@ -16,7 +16,7 @@
 - `PosixSourceAccessor::createAtRoot()` returns a SourcePath, not ref<SourceAccessor>; use `make_ref<PosixSourceAccessor>(path, true)` directly
 
 ## Patterns That Don't Work
-- lazy-path-inputs via PosixSourceAccessor: flake resolution code calls `lstat()` on flake.lock (throws if missing), and the C API test `nix_api_load_flake_with_flags` fails because the lazy accessor doesn't match store accessor behavior for missing files during lock file creation. Needs analysis of flake lock resolution flow before attempting again.
+- lazy-path-inputs via PosixSourceAccessor: `mountInput()` in `eval.cc` mounts the ORIGINAL accessor into storeFS. With PosixAccessor, this means storeFS delegates to the filesystem for mounted paths. When something later calls `lstat()` (throwing) on `flake.lock` through the storeFS, it hits the PosixAccessor which throws FileNotFound. The old store accessor works because the store copy has the same files but the store backend handles missing files in NAR-based paths differently. Fix requires either: (a) modifying `mountInput` to re-mount a store accessor after `fetchToStore`, or (b) making PosixAccessor's `lstat()` return a sentinel instead of throwing when mounted in storeFS. Affects C API test `nix_api_load_flake_with_flags` — flakes with inputs trigger it.
 - `input-substitution-before-fetch` (DetSys #380): already implemented in 2.33.3 in `getAccessorUnchecked()` — `isFinal() && getNarHash()` → `store.ensurePath()` before `scheme->getAccessor()`
 
 ## Domain Notes
